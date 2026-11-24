@@ -31,6 +31,14 @@ class WorkflowStructureTests(unittest.TestCase):
         self.assertIn('workflows: ["Coletar preços do radar"]', workflow)
         self.assertIn("github.event.workflow_run.conclusion == 'success'", workflow)
 
+    def test_collector_syncs_snapshot_commit_with_latest_main_before_push(self):
+        workflow = (ROOT / ".github" / "workflows" / "collect-prices.yml").read_text(encoding="utf-8")
+        self.assertIn("git fetch origin main", workflow)
+        self.assertIn("git reset --hard origin/main", workflow)
+        self.assertIn("python scripts/publish_snapshot.py", workflow)
+        self.assertIn("git push origin HEAD:main", workflow)
+        self.assertIn("attempt in 1 2 3 4 5", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

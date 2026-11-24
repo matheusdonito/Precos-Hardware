@@ -85,13 +85,35 @@ jobs:
           if not observations:
               raise SystemExit('Snapshot sem observações; publicação bloqueada.')
           PY
-      - name: Atualizar snapshot histórico no repositório
+      - name: Publicar snapshot preservando commits concorrentes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/observations.json
-          git diff --cached --quiet || git commit -m "Atualizar snapshot de preços"
-          git push
+          cp data/observations.json "$RUNNER_TEMP/observations-collected.json"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            python scripts/publish_snapshot.py \
+              --collected "$RUNNER_TEMP/observations-collected.json" \
+              --target data/observations.json
+            git add data/observations.json
+
+            if git diff --cached --quiet; then
+              echo "Snapshot já está atualizado no main."
+              exit 0
+            fi
+
+            git commit -m "Atualizar snapshot de preços"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            echo "O main avançou durante o push (tentativa $attempt/5); buscando e mesclando novamente."
+          done
+
+          echo "Não foi possível publicar o snapshot após 5 tentativas." >&2
+          exit 1
       - name: Publicar observações como artefato do workflow
         uses: actions/upload-artifact@v4
         with:
